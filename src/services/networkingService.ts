@@ -394,5 +394,4 @@ export class NetworkingService {
   }
 }
 
-// Export types for use in other components
-export type { Conference, NetworkingOpportunity, Mentor };
+
