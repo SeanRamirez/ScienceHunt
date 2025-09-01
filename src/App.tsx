@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import { NetworkingService, Conference, NetworkingOpportunity, Mentor } from './services/networkingService';
 
 interface Career {
   id: string;
@@ -35,8 +36,10 @@ interface SkillAssessment {
   proficiency: 'none' | 'beginner' | 'intermediate' | 'advanced' | 'expert';
 }
 
+
+
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'explore' | 'quiz' | 'skills' | 'about'>('explore');
+  const [activeTab, setActiveTab] = useState<'explore' | 'quiz' | 'skills' | 'networking' | 'about'>('explore');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [quizAnswers, setQuizAnswers] = useState<{[key: number]: string}>({});
@@ -49,6 +52,14 @@ const App: React.FC = () => {
   const [selectedCareerForAnalysis, setSelectedCareerForAnalysis] = useState<Career | null>(null);
   const [showSkillResults, setShowSkillResults] = useState(false);
   const [currentSkillIndex, setCurrentSkillIndex] = useState(0);
+
+  // Networking states
+  const [selectedCareerForNetworking, setSelectedCareerForNetworking] = useState<Career | null>(null);
+  const [networkingFilter, setNetworkingFilter] = useState<string>('all');
+  const [conferences, setConferences] = useState<Conference[]>([]);
+  const [networkingOpportunities, setNetworkingOpportunities] = useState<NetworkingOpportunity[]>([]);
+  const [mentors, setMentors] = useState<Mentor[]>([]);
+  const [isLoadingNetworking, setIsLoadingNetworking] = useState(false);
 
   const careers: Career[] = [
     {
@@ -141,6 +152,8 @@ const App: React.FC = () => {
     }
   ];
 
+
+
   const skills: Skill[] = [
     // Programming & Technical Skills
     { id: 'programming', name: 'Programming', category: 'Technical', description: 'Ability to write code in various programming languages', difficulty: 'intermediate', resources: ['Codecademy', 'freeCodeCamp', 'LeetCode'] },
@@ -220,6 +233,53 @@ const App: React.FC = () => {
     return matchesCategory && matchesSearch;
   });
 
+  // Networking functions
+  const fetchNetworkingData = async (careerId: string) => {
+    setIsLoadingNetworking(true);
+    
+    try {
+      const { conferences, opportunities, mentors } = await NetworkingService.fetchAllNetworkingData(careerId);
+      
+      setConferences(conferences);
+      setNetworkingOpportunities(opportunities);
+      setMentors(mentors);
+    } catch (error) {
+      console.error('Error fetching networking data:', error);
+      // Fallback to sample data
+      setConferences([]);
+      setNetworkingOpportunities([]);
+      setMentors([]);
+    } finally {
+      setIsLoadingNetworking(false);
+    }
+  };
+
+  const startNetworking = (career: Career) => {
+    setSelectedCareerForNetworking(career);
+    fetchNetworkingData(career.id);
+  };
+
+  const getFilteredNetworkingData = () => {
+    if (!selectedCareerForNetworking) return [];
+    
+    const allData = [
+      ...conferences.map(conf => ({ ...conf, dataType: 'conference' })),
+      ...networkingOpportunities.map(opp => ({ ...opp, dataType: 'opportunity' }))
+    ];
+    
+    if (networkingFilter === 'all') return allData;
+    return allData.filter(item => item.dataType === networkingFilter);
+  };
+
+  const getAvailabilityColor = (availability: string) => {
+    switch (availability) {
+      case 'available': return '#10B981';
+      case 'limited': return '#F59E0B';
+      case 'unavailable': return '#EF4444';
+      default: return '#6B7280';
+    }
+  };
+
   const handleQuizAnswer = (answer: string) => {
     setQuizAnswers(prev => ({ ...prev, [currentQuestion]: answer }));
   };
@@ -233,9 +293,8 @@ const App: React.FC = () => {
   };
 
   const calculateResults = () => {
-    // Simple recommendation algorithm based on answers
     const answers = Object.values(quizAnswers);
-    let recommendedCategory = 'Technology'; // default
+    let recommendedCategory = 'Technology';
 
     if (answers[0] === 'Working with physical systems and machines' || 
         answers[1] === 'Hands-on building and testing' ||
@@ -302,7 +361,7 @@ const App: React.FC = () => {
         
         gaps.push({
           skill: matchingSkill,
-          required: 'intermediate', // Default requirement
+          required: 'intermediate',
           current: proficiency,
           gap: getGapLevel(proficiency, 'intermediate'),
           resources: matchingSkill.resources
@@ -327,11 +386,11 @@ const App: React.FC = () => {
 
   const getGapColor = (gap: string) => {
     switch (gap) {
-      case 'none': return '#10B981'; // green
-      case 'small': return '#F59E0B'; // yellow
-      case 'medium': return '#F97316'; // orange
-      case 'large': return '#EF4444'; // red
-      default: return '#6B7280'; // gray
+      case 'none': return '#10B981';
+      case 'small': return '#F59E0B';
+      case 'medium': return '#F97316';
+      case 'large': return '#EF4444';
+      default: return '#6B7280';
     }
   };
 
@@ -365,6 +424,12 @@ const App: React.FC = () => {
               onClick={() => setActiveTab('skills')}
             >
               Skill Analysis
+            </button>
+            <button 
+              className={`nav-btn ${activeTab === 'networking' ? 'active' : ''}`}
+              onClick={() => setActiveTab('networking')}
+            >
+              Networking
             </button>
             <button 
               className={`nav-btn ${activeTab === 'about' ? 'active' : ''}`}
@@ -612,6 +677,158 @@ const App: React.FC = () => {
                 <button className="reset-skills-btn" onClick={resetSkillAnalysis}>
                   Analyze Another Career
                 </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'networking' && (
+          <div className="networking-section">
+            {!selectedCareerForNetworking ? (
+              <div className="networking-intro">
+                <h2>Networking & Mentorship</h2>
+                <p>Connect with professionals, attend conferences, and find mentors in your field.</p>
+                <div className="careers-grid">
+                  {careers.map(career => (
+                    <div key={career.id} className="career-card">
+                      <div className="career-header">
+                        <h3 className="career-title">{career.title}</h3>
+                        <span className="career-category">{career.category}</span>
+                      </div>
+                      <p className="career-description">{career.description}</p>
+                      <button 
+                        className="networking-btn"
+                        onClick={() => startNetworking(career)}
+                      >
+                        Find Networking Opportunities
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="networking-content">
+                <div className="networking-header">
+                  <h2>Networking for {selectedCareerForNetworking.title}</h2>
+                  <button 
+                    className="back-btn"
+                    onClick={() => setSelectedCareerForNetworking(null)}
+                  >
+                    ← Back to Careers
+                  </button>
+                </div>
+
+                {isLoadingNetworking ? (
+                  <div className="loading-container">
+                    <div className="loading-spinner"></div>
+                    <p>Finding networking opportunities...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="networking-filters">
+                      <button 
+                        className={`filter-btn ${networkingFilter === 'all' ? 'active' : ''}`}
+                        onClick={() => setNetworkingFilter('all')}
+                      >
+                        All Opportunities
+                      </button>
+                      <button 
+                        className={`filter-btn ${networkingFilter === 'conference' ? 'active' : ''}`}
+                        onClick={() => setNetworkingFilter('conference')}
+                      >
+                        Conferences
+                      </button>
+                      <button 
+                        className={`filter-btn ${networkingFilter === 'opportunity' ? 'active' : ''}`}
+                        onClick={() => setNetworkingFilter('opportunity')}
+                      >
+                        Other Events
+                      </button>
+                    </div>
+
+                                         <div className="networking-grid">
+                       {getFilteredNetworkingData().map((item, index) => (
+                         <div key={index} className="networking-card">
+                           <div className="networking-card-header">
+                             <h3 className="networking-title">{(item as any).name || (item as any).title}</h3>
+                             <span className={`networking-type ${item.type}`}>
+                               {item.type.charAt(0).toUpperCase() + item.type.slice(1)}
+                             </span>
+                           </div>
+                          <p className="networking-description">{item.description}</p>
+                          <div className="networking-details">
+                            <div className="detail-row">
+                              <strong>Date:</strong> {new Date(item.date).toLocaleDateString()}
+                            </div>
+                            <div className="detail-row">
+                              <strong>Location:</strong> {item.location}
+                            </div>
+                            <div className="detail-row">
+                              <strong>Cost:</strong> {item.cost}
+                            </div>
+                            {item.virtual && (
+                              <div className="virtual-badge">🌐 Virtual Event</div>
+                            )}
+                          </div>
+                          <div className="networking-tags">
+                            {item.tags.map((tag, idx) => (
+                              <span key={idx} className="networking-tag">{tag}</span>
+                            ))}
+                          </div>
+                          <a 
+                            href={item.website} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="networking-link"
+                          >
+                            Learn More →
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mentorship-section">
+                      <h3>Available Mentors</h3>
+                      <div className="mentors-grid">
+                        {mentors.map(mentor => (
+                          <div key={mentor.id} className="mentor-card">
+                            <div className="mentor-header">
+                              <h4 className="mentor-name">{mentor.name}</h4>
+                              <div 
+                                className="availability-badge"
+                                style={{ backgroundColor: getAvailabilityColor(mentor.availability) }}
+                              >
+                                {mentor.availability}
+                              </div>
+                            </div>
+                            <div className="mentor-details">
+                              <p className="mentor-position">{mentor.position} at {mentor.company}</p>
+                              <p className="mentor-experience">{mentor.experience} experience</p>
+                              <p className="mentor-bio">{mentor.bio}</p>
+                            </div>
+                            <div className="mentor-expertise">
+                              <strong>Expertise:</strong>
+                              <div className="expertise-tags">
+                                {mentor.expertise.map((skill, idx) => (
+                                  <span key={idx} className="expertise-tag">{skill}</span>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="mentor-languages">
+                              <strong>Languages:</strong> {mentor.languages.join(', ')}
+                            </div>
+                            <a 
+                              href={`mailto:${mentor.contact}`}
+                              className="contact-mentor-btn"
+                            >
+                              Contact Mentor
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
